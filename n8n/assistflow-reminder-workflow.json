@@ -1,0 +1,199 @@
+{
+  "name": "AssistFlow AI - Proactive Reminder Dispatcher",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 1
+            }
+          ]
+        }
+      },
+      "id": "1",
+      "name": "Schedule Trigger (Every 1m)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:5000/api/orchestrator/claim-due",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-internal-secret",
+              "value": "{{ $env.INTERNAL_API_SECRET || 'super_secret_assistflow_internal_key' }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "2",
+      "name": "Claim Due Reminders",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        480,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.claimed }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "array",
+                "operation": "lengthGreaterThan"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "3",
+      "name": "Has Due Reminders?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        700,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "claimed",
+        "options": {}
+      },
+      "id": "4",
+      "name": "Split Reminders",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        920,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.telegram.org/bot{{ $env.TELEGRAM_BOT_TOKEN }}/sendMessage",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"chat_id\": \"{{ $json.chat_id }}\",\n  \"text\": \"🔔 *AssistFlow Reminder*\\n\\n📌 *{{ $json.title }}*\\n⏰ Scheduled for: {{ $json.scheduled_at }}\",\n  \"parse_mode\": \"Markdown\"\n}",
+        "options": {}
+      },
+      "id": "5",
+      "name": "Send Telegram Notification",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1140,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:5000/api/orchestrator/report-delivery",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-internal-secret",
+              "value": "{{ $env.INTERNAL_API_SECRET || 'super_secret_assistflow_internal_key' }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"reminder_id\": \"{{ $('Split Reminders').item.json.id }}\",\n  \"status\": \"{{ $json.ok ? 'success' : 'failed' }}\",\n  \"provider_message_id\": \"{{ $json.result ? $json.result.message_id : '' }}\",\n  \"workflow_id\": \"{{ $('Claim Due Reminders').item.json.workflow_id }}\"\n}",
+        "options": {}
+      },
+      "id": "6",
+      "name": "Report Delivery Outcome",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1360,
+        200
+      ]
+    }
+  ],
+  "connections": {
+    "Schedule Trigger (Every 1m)": {
+      "main": [
+        [
+          {
+            "node": "Claim Due Reminders",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claim Due Reminders": {
+      "main": [
+        [
+          {
+            "node": "Has Due Reminders?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Due Reminders?": {
+      "main": [
+        [
+          {
+            "node": "Split Reminders",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Reminders": {
+      "main": [
+        [
+          {
+            "node": "Send Telegram Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Telegram Notification": {
+      "main": [
+        [
+          {
+            "node": "Report Delivery Outcome",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

@@ -1,0 +1,44 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: assistflow_postgres
+    restart: always
+    environment:
+      POSTGRES_USER: assistflow_user
+      POSTGRES_PASSWORD: assistflow_password
+      POSTGRES_DB: assistflow_db
+    ports:
+      - "127.0.0.1:5435:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: assistflow_pgadmin
+    restart: always
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@example.com
+      PGADMIN_DEFAULT_PASSWORD: local_admin_password
+    ports:
+      - "127.0.0.1:5050:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    depends_on:
+      - postgres
+  
+  n8n:
+    image: docker.n8n.io/n8nio/n8n
+    container_name: n8n
+    restart: always
+    ports:
+      - "127.0.0.1:5678:5678"
+    environment:
+      TZ: Africa/Addis_Ababa
+      GENERIC_TIMEZONE: Africa/Addis_Ababa
+    volumes:
+      - n8n_data:/home/node/.n8n
+
+volumes:
+  postgres_data:
+  pgadmin_data:
+  n8n_data:
