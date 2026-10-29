@@ -37,17 +37,18 @@ export async function processDueRemindersWorker() {
 
     console.log(`⏰ [Scheduler] Found ${dueReminders.length} due reminder(s). Claiming...`);
 
-    for (const reminder of dueReminders) {
-      reminder.status = ReminderStatus.PROCESSING;
-      await queryRunner.manager.save(reminder);
-    }
-
     const workflow = queryRunner.manager.create(WorkflowExecution, {
       workflow_type: 'reminder_dispatch',
       status: WorkflowStatus.RUNNING,
       reference_id: `worker_batch_${dueReminders.length}`,
     });
     await queryRunner.manager.save(workflow);
+
+    for (const reminder of dueReminders) {
+      reminder.status = ReminderStatus.PROCESSING;
+      reminder.workflow_execution_id = workflow.id;
+      await queryRunner.manager.save(reminder);
+    }
 
     await queryRunner.commitTransaction();
 
@@ -63,6 +64,7 @@ export async function processDueRemindersWorker() {
 
         const attempt = attemptRepo.create({
           reminder_id: reminder.id,
+          workflow_execution_id: workflow.id,
           provider: 'telegram',
           attempt_number: previousAttempts + 1,
           status: NotificationStatus.SUCCESS,
@@ -81,6 +83,7 @@ export async function processDueRemindersWorker() {
 
         const attempt = attemptRepo.create({
           reminder_id: reminder.id,
+          workflow_execution_id: workflow.id,
           provider: 'telegram',
           attempt_number: previousAttempts + 1,
           status: NotificationStatus.FAILED,

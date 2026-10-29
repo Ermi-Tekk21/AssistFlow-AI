@@ -4,7 +4,10 @@ import {
   Column,
   CreateDateColumn,
   UpdateDateColumn,
+  ManyToOne,
+  JoinColumn,
 } from 'typeorm';
+import { WorkflowExecution } from './WorkflowExecution';
 
 export enum EventStatus {
   CONFIRMED = 'confirmed',
@@ -44,6 +47,16 @@ export class CalendarEventRef {
     default: EventStatus.CONFIRMED,
   })
   status!: EventStatus;
+
+  @Column({ type: 'uuid', nullable: true })
+  workflow_execution_id!: string | null;
+
+  @ManyToOne(() => WorkflowExecution, (wf) => wf.calendar_events, {
+    nullable: true,
+    onDelete: 'SET NULL',
+  })
+  @JoinColumn({ name: 'workflow_execution_id' })
+  workflow_execution!: WorkflowExecution | null;
 
   @CreateDateColumn({ type: 'timestamptz' })
   created_at!: Date;

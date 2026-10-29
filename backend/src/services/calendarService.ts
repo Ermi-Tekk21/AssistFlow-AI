@@ -241,6 +241,7 @@ export async function createConfirmedEvent(details: {
   timezone: string;
   attendees?: string[];
   description?: string;
+  workflow_execution_id?: string | null;
 }): Promise<CalendarEventRef> {
   const eventRefRepo = AppDataSource.getRepository(CalendarEventRef);
   let providerEventId = `local_${Date.now()}`;
@@ -283,6 +284,7 @@ export async function createConfirmedEvent(details: {
     timezone: details.timezone,
     attendees: details.attendees || [],
     status: EventStatus.CONFIRMED,
+    workflow_execution_id: details.workflow_execution_id || null,
   });
 
   return await eventRefRepo.save(eventRecord);

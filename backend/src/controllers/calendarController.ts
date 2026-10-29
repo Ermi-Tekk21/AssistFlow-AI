@@ -107,7 +107,15 @@ export async function checkAvailability(req: Request, res: Response) {
  */
 export async function confirmMeeting(req: Request, res: Response) {
   try {
-    const { title, start_time, end_time, timezone = 'UTC', attendees = [], description } = req.body;
+    const {
+      title,
+      start_time,
+      end_time,
+      timezone = 'UTC',
+      attendees = [],
+      description,
+      workflow_execution_id,
+    } = req.body;
 
     if (!title || !start_time || !end_time) {
       return res.status(400).json({
@@ -133,6 +141,7 @@ export async function confirmMeeting(req: Request, res: Response) {
       timezone,
       attendees,
       description,
+      workflow_execution_id: workflow_execution_id || null,
     });
 
     return res.json({
