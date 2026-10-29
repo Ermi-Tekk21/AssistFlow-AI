@@ -7,6 +7,7 @@ import dotenv from "dotenv";
 import { AppDataSource } from "./config/database";
 import assistantRoutes from "./routes/assistantRoutes";
 import orchestratorRoutes from "./routes/orchestratorRoutes";
+import calendarRoutes from "./routes/calendarRoutes";
 import { startSchedulerWorker } from "./services/schedulerWorker";
 
 dotenv.config();
@@ -23,6 +24,7 @@ app.get("/", (req, res) => {
 });
 app.use("/api/assistant", assistantRoutes);
 app.use("/api/orchestrator", orchestratorRoutes);
+app.use("/api/calendar", calendarRoutes);
 
 async function bootstrap() {
   try {

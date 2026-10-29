@@ -42,13 +42,7 @@ export async function claimDueReminders(req: Request, res: Response) {
       return res.json({ claimed: [] });
     }
 
-    // 2. Mark claimed reminders as 'processing'
-    for (const reminder of dueReminders) {
-      reminder.status = ReminderStatus.PROCESSING;
-      await queryRunner.manager.save(reminder);
-    }
-
-    // 3. Log a workflow execution entry for auditing
+    // 2. Log a workflow execution entry for auditing
     const workflow = queryRunner.manager.create(WorkflowExecution, {
       workflow_type: "reminder_dispatch",
       status: WorkflowStatus.RUNNING,
@@ -56,14 +50,22 @@ export async function claimDueReminders(req: Request, res: Response) {
     });
     await queryRunner.manager.save(workflow);
 
+    // 3. Mark claimed reminders as 'processing' and attach parent workflow
+    for (const reminder of dueReminders) {
+      reminder.status = ReminderStatus.PROCESSING;
+      reminder.workflow_execution_id = workflow.id;
+      await queryRunner.manager.save(reminder);
+    }
+
     await queryRunner.commitTransaction();
 
-    // 4. Return reminders formatted with telegram target chat_id
+    // 4. Return reminders formatted with telegram target chat_id and workflow_id
     const responsePayload = dueReminders.map((r) => ({
       id: r.id,
       title: r.title,
       scheduled_at: r.scheduled_at,
       chat_id: process.env.TELEGRAM_CHAT_ID,
+      workflow_id: workflow.id,
     }));
 
     return res.json({ claimed: responsePayload, workflow_id: workflow.id });
@@ -100,19 +102,23 @@ export async function reportNotificationOutcome(req: Request, res: Response) {
 
     const reminder = await reminderRepo.findOne({
       where: { id: reminder_id },
-      relations: { notification_attempts: true },
     });
 
     if (!reminder) {
       return res.status(404).json({ error: "Reminder not found" });
     }
 
-    const attemptNumber = (reminder.notification_attempts?.length || 0) + 1;
+    const previousAttempts = await attemptRepo.count({
+      where: { reminder_id: reminder.id },
+    });
+    const attemptNumber = previousAttempts + 1;
     const isSuccess = status === "success";
 
-    // 1. Record attempt in notification_attempts table
+    // 1. Record attempt in notification_attempts table linked to workflow
     const attempt = attemptRepo.create({
       reminder_id: reminder.id,
+      workflow_execution_id:
+        workflow_id || reminder.workflow_execution_id || null,
       provider: "telegram",
       attempt_number: attemptNumber,
       status: isSuccess
@@ -125,17 +131,14 @@ export async function reportNotificationOutcome(req: Request, res: Response) {
     });
     await attemptRepo.save(attempt);
 
-    // 2. Update reminder status based on retry policy (max 3 attempts)
+    // 2. Update reminder status directly (avoiding TypeORM relation cascades)
+    let newStatus = ReminderStatus.PENDING;
     if (isSuccess) {
-      reminder.status = ReminderStatus.SENT;
-    } else {
-      if (attemptNumber >= 3) {
-        reminder.status = ReminderStatus.FAILED;
-      } else {
-        reminder.status = ReminderStatus.PENDING; // Re-queue for next retry
-      }
+      newStatus = ReminderStatus.SENT;
+    } else if (attemptNumber >= 3) {
+      newStatus = ReminderStatus.FAILED;
     }
-    await reminderRepo.save(reminder);
+    await reminderRepo.update(reminder.id, { status: newStatus });
 
     // 3. Mark workflow execution as completed if provided
     if (workflow_id) {

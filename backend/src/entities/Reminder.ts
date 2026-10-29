@@ -5,45 +5,58 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
   OneToMany,
-} from "typeorm";
-import { NotificationAttempt } from "./NotificationAttempt";
+  ManyToOne,
+  JoinColumn,
+} from 'typeorm';
+import { NotificationAttempt } from './NotificationAttempt';
+import { WorkflowExecution } from './WorkflowExecution';
 
 export enum ReminderStatus {
-  PENDING = "pending",
-  PROCESSING = "processing",
-  SENT = "sent",
-  FAILED = "failed",
-  CANCELLED = "cancelled",
+  PENDING = 'pending',
+  PROCESSING = 'processing',
+  SENT = 'sent',
+  FAILED = 'failed',
+  CANCELLED = 'cancelled',
 }
 
-@Entity("reminders")
+@Entity('reminders')
 export class Reminder {
-  @PrimaryGeneratedColumn("uuid")
+  @PrimaryGeneratedColumn('uuid')
   id!: string;
 
-  @Column({ type: "varchar", length: 255 })
+  @Column({ type: 'varchar', length: 255 })
   title!: string;
 
-  @Column({ type: "varchar", length: 100, default: "default_user" })
+  @Column({ type: 'varchar', length: 100, default: 'default_user' })
   owner_id!: string;
 
-  @Column({ type: "timestamptz" })
+  @Column({ type: 'timestamptz' })
   scheduled_at!: Date;
 
-  @Column({ type: "varchar", length: 50, default: "UTC" })
+  @Column({ type: 'varchar', length: 50, default: 'UTC' })
   timezone!: string;
 
   @Column({
-    type: "enum",
+    type: 'enum',
     enum: ReminderStatus,
     default: ReminderStatus.PENDING,
   })
   status!: ReminderStatus;
 
-  @CreateDateColumn({ type: "timestamptz" })
+  @Column({ type: 'uuid', nullable: true })
+  workflow_execution_id!: string | null;
+
+  @ManyToOne(() => WorkflowExecution, (wf) => wf.reminders, {
+    nullable: true,
+    onDelete: 'SET NULL',
+  })
+  @JoinColumn({ name: 'workflow_execution_id' })
+  workflow_execution!: WorkflowExecution | null;
+
+  @CreateDateColumn({ type: 'timestamptz' })
   created_at!: Date;
 
-  @UpdateDateColumn({ type: "timestamptz" })
+  @UpdateDateColumn({ type: 'timestamptz' })
   updated_at!: Date;
 
   @OneToMany(() => NotificationAttempt, (attempt) => attempt.reminder)

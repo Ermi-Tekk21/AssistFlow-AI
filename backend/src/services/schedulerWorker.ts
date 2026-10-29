@@ -37,17 +37,18 @@ export async function processDueRemindersWorker() {
 
     console.log(`⏰ [Scheduler] Found ${dueReminders.length} due reminder(s). Claiming...`);
 
-    for (const reminder of dueReminders) {
-      reminder.status = ReminderStatus.PROCESSING;
-      await queryRunner.manager.save(reminder);
-    }
-
     const workflow = queryRunner.manager.create(WorkflowExecution, {
       workflow_type: 'reminder_dispatch',
       status: WorkflowStatus.RUNNING,
       reference_id: `worker_batch_${dueReminders.length}`,
     });
     await queryRunner.manager.save(workflow);
+
+    for (const reminder of dueReminders) {
+      reminder.status = ReminderStatus.PROCESSING;
+      reminder.workflow_execution_id = workflow.id;
+      await queryRunner.manager.save(reminder);
+    }
 
     await queryRunner.commitTransaction();
 
@@ -57,32 +58,41 @@ export async function processDueRemindersWorker() {
         const text = `🔔 *AssistFlow Reminder*\n\n📌 *${reminder.title}*\n⏰ Scheduled: ${new Date(reminder.scheduled_at).toLocaleTimeString()}`;
         const telegramResult = await sendTelegramMessage(text);
 
+        const previousAttempts = await attemptRepo.count({
+          where: { reminder_id: reminder.id },
+        });
+
         const attempt = attemptRepo.create({
           reminder_id: reminder.id,
+          workflow_execution_id: workflow.id,
           provider: 'telegram',
-          attempt_number: 1,
+          attempt_number: previousAttempts + 1,
           status: NotificationStatus.SUCCESS,
           provider_message_id: String(telegramResult.result.message_id),
         });
         await attemptRepo.save(attempt);
 
-        reminder.status = ReminderStatus.SENT;
-        await reminderRepo.save(reminder);
+        await reminderRepo.update(reminder.id, { status: ReminderStatus.SENT });
         console.log(`✅ [Scheduler] Sent reminder "${reminder.title}" to Telegram!`);
       } catch (err: any) {
         console.error(`❌ [Scheduler] Failed to send reminder "${reminder.title}":`, err.message);
 
+        const previousAttempts = await attemptRepo.count({
+          where: { reminder_id: reminder.id },
+        });
+
         const attempt = attemptRepo.create({
           reminder_id: reminder.id,
+          workflow_execution_id: workflow.id,
           provider: 'telegram',
-          attempt_number: 1,
+          attempt_number: previousAttempts + 1,
           status: NotificationStatus.FAILED,
           error_code: err.message || 'Dispatch error',
         });
         await attemptRepo.save(attempt);
 
-        reminder.status = ReminderStatus.FAILED;
-        await reminderRepo.save(reminder);
+        const newStatus = previousAttempts + 1 >= 3 ? ReminderStatus.FAILED : ReminderStatus.PENDING;
+        await reminderRepo.update(reminder.id, { status: newStatus });
       }
     }
 

@@ -5,48 +5,59 @@ import {
   CreateDateColumn,
   ManyToOne,
   JoinColumn,
-} from "typeorm";
-import { Reminder } from "./Reminder";
+} from 'typeorm';
+import { Reminder } from './Reminder';
+import { WorkflowExecution } from './WorkflowExecution';
 
 export enum NotificationStatus {
-  SUCCESS = "success",
-  FAILED = "failed",
-  RETRYING = "retrying",
+  SUCCESS = 'success',
+  FAILED = 'failed',
+  RETRYING = 'retrying',
 }
 
-@Entity("notification_attempts")
+@Entity('notification_attempts')
 export class NotificationAttempt {
-  @PrimaryGeneratedColumn("uuid")
+  @PrimaryGeneratedColumn('uuid')
   id!: string;
 
-  @Column({ type: "uuid" })
+  @Column({ type: 'uuid' })
   reminder_id!: string;
 
   @ManyToOne(() => Reminder, (reminder) => reminder.notification_attempts, {
-    onDelete: "CASCADE",
+    onDelete: 'CASCADE',
   })
-  @JoinColumn({ name: "reminder_id" })
+  @JoinColumn({ name: 'reminder_id' })
   reminder!: Reminder;
 
-  @Column({ type: "varchar", length: 50, default: "telegram" })
+  @Column({ type: 'varchar', length: 50, default: 'telegram' })
   provider!: string;
 
-  @Column({ type: "int", default: 1 })
+  @Column({ type: 'int', default: 1 })
   attempt_number!: number;
 
   @Column({
-    type: "enum",
+    type: 'enum',
     enum: NotificationStatus,
     default: NotificationStatus.SUCCESS,
   })
   status!: NotificationStatus;
 
-  @CreateDateColumn({ type: "timestamptz" })
+  @Column({ type: 'uuid', nullable: true })
+  workflow_execution_id!: string | null;
+
+  @ManyToOne(() => WorkflowExecution, (wf) => wf.notification_attempts, {
+    nullable: true,
+    onDelete: 'SET NULL',
+  })
+  @JoinColumn({ name: 'workflow_execution_id' })
+  workflow_execution!: WorkflowExecution | null;
+
+  @CreateDateColumn({ type: 'timestamptz' })
   attempted_at!: Date;
 
-  @Column({ type: "varchar", length: 100, nullable: true })
+  @Column({ type: 'varchar', length: 100, nullable: true })
   provider_message_id!: string | null;
 
-  @Column({ type: "text", nullable: true })
+  @Column({ type: 'text', nullable: true })
   error_code!: string | null;
 }
